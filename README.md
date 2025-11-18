@@ -1,5 +1,3 @@
-# GEMINI.md (Español)
-
 ## Resumen del Proyecto
 
 Este proyecto, "Pakkorat Uno", es una implementación digital del juego de cartas Baccarat que utiliza un método de entrada novedoso: un feed de video en vivo que detecta cartas físicas. Las cartas son las de un juego UNO estándar (valores del 0 al 9 en cuatro colores) que han sido aumentadas con códigos QR.
