@@ -20,12 +20,12 @@ class InterfazBaccarat:
         self.esperando_carta = False
         self.ultima_carta_leida = None
         self.modo_debug = False
+        self.cartas_usadas_en_partida = set()  # Conjunto de cartas ya detectadas
         
         # Configuración de ventana
         self.ancho_ventana = ancho_ventana
         self.alto_ventana = alto_ventana
-        
-        # Marcador de partidas
+
         self.victorias_jugador = 0
         self.victorias_banca = 0
         self.empates = 0
@@ -33,6 +33,47 @@ class InterfazBaccarat:
     def conectar(self):
         """Conecta con la cámara"""
         return self.detector.conectar_camara()
+    
+    def _carta_a_clave(self, carta):
+        """
+        Convierte una carta a una clave única para comparación
+        
+        Args:
+            carta: dict {"color": "rojo", "valor": 7}
+            
+        Returns:
+            str: Clave única "rojo_7"
+        """
+        return f"{carta['color'].lower()}_{carta['valor']}"
+    
+    def _carta_ya_usada(self, carta):
+        """
+        Verifica si la carta ya fue usada en esta partida
+        
+        Args:
+            carta: dict {"color": "rojo", "valor": 7}
+            
+        Returns:
+            bool: True si ya fue usada, False si es nueva
+        """
+        clave = self._carta_a_clave(carta)
+        return clave in self.cartas_usadas_en_partida
+    
+    def _registrar_carta_usada(self, carta):
+        """
+        Registra una carta como usada en esta partida
+        
+        Args:
+            carta: dict {"color": "rojo", "valor": 7}
+        """
+        clave = self._carta_a_clave(carta)
+        self.cartas_usadas_en_partida.add(clave)
+    
+    def _limpiar_cartas_usadas(self):
+        """
+        Limpia la memoria de cartas usadas (se llama al empezar nueva partida)
+        """
+        self.cartas_usadas_en_partida.clear()
     
     def dibujar_interfaz(self, frame):
         """Dibuja la interfaz del juego sobre el frame"""
@@ -48,7 +89,7 @@ class InterfazBaccarat:
         y_offset = 15
         
         # Título (más pequeño)
-        cv2.putText(panel, "BACCARAT UNO", (10, y_offset), 
+        cv2.putText(panel, "PAKKORAT UNO", (10, y_offset), 
                    cv2.FONT_HERSHEY_DUPLEX, 0.8, (255, 255, 255), 1)
         y_offset += 30
         
@@ -184,30 +225,42 @@ class InterfazBaccarat:
     
     def procesar_carta_detectada(self, carta):
         """Procesa una carta detectada y la agrega al juego"""
-        estado = self.juego.obtener_estado()
+        
+        # 🆕 VERIFICAR SI LA CARTA YA FUE USADA EN ESTA PARTIDA
+        if self._carta_ya_usada(carta):
+            print(f"⚠️  Carta {self._carta_a_clave(carta)} ya fue usada. Ignorando...")
+            return False
         
         # Evitar leer la misma carta múltiples veces
         if carta == self.ultima_carta_leida:
-            return
+            return False
         
         self.ultima_carta_leida = carta
+        
+        estado = self.juego.obtener_estado()
         
         # Agregar carta según el estado
         if estado["necesita_carta"] == "jugador":
             exito, mensaje = self.juego.agregar_carta_jugador(carta)
             if exito:
                 print(f"✅ {mensaje}")
+                self._registrar_carta_usada(carta) 
                 self.esperando_carta = True
+                return True
         elif estado["necesita_carta"] == "banca":
             exito, mensaje = self.juego.agregar_carta_banca(carta)
             if exito:
                 print(f"✅ {mensaje}")
+                self._registrar_carta_usada(carta) 
                 self.esperando_carta = True
+                return True
         
         # Verificar si el juego terminó
         if self.juego.estado == "finalizado":
             self.esperando_carta = False
             self._actualizar_marcador()
+        
+        return False
     
     def _actualizar_marcador(self):
         """Actualiza el marcador de victorias"""
@@ -227,25 +280,26 @@ class InterfazBaccarat:
                 self.ultima_carta_leida = None
                 print(f"🎰 {mensaje}")
         else:
-            print("⚠️ Ya hay una ronda en curso")
+            print("ya hay una ronda en curso")
     
     def nueva_ronda(self):
         """Reinicia el juego para una nueva ronda"""
         self.juego.reiniciar()
         self.esperando_carta = False
         self.ultima_carta_leida = None
-        print("🔄 Nueva ronda lista")
+        self._limpiar_cartas_usadas()  
+        print("nueva ronda lista")
     
     def ejecutar(self):
         """Bucle principal del juego"""
         if not self.conectar():
-            print("❌ No se pudo conectar a la cámara")
+            print("no se pudo conectar a la cámara")
             return
         
         print("\n" + "=" * 70)
-        print("🎰 BACCARAT UNO - Juego iniciado")
+        print("🎰 PAKKORAT UNO - Juego iniciado")
         print("=" * 70)
-        print("\n📋 INSTRUCCIONES:")
+        print("\ncomandos:")
         print("   ESPACIO - Iniciar ronda")
         print("   R       - Nueva ronda (después de terminar)")
         print("   D       - Activar/desactivar debug")
@@ -284,7 +338,7 @@ class InterfazBaccarat:
                 if key == ord('q'):
                     print("\n👋 Saliendo del juego...")
                     break
-                elif key == ord(' '):  # Espacio
+                elif key == ord(' '): 
                     self.iniciar_ronda()
                 elif key == ord('r'):
                     self.nueva_ronda()
@@ -293,24 +347,16 @@ class InterfazBaccarat:
                     print(f"🔧 Modo DEBUG: {'ACTIVADO' if self.modo_debug else 'DESACTIVADO'}")
         
         except KeyboardInterrupt:
-            print("\n⚠️ Interrumpido por usuario")
+            print("\ninterrumpido por usuario")
         
         finally:
             self.detector.liberar()
-            print("\n" + "=" * 70)
-            print("📊 ESTADÍSTICAS FINALES:")
-            print(f"   Victorias Jugador: {self.victorias_jugador}")
-            print(f"   Victorias Banca: {self.victorias_banca}")
-            print(f"   Empates: {self.empates}")
             print("=" * 70)
-            print("\n🎰 ¡Gracias por jugar!")
+            print("\n🎰 gracias por jugar pakkorat")
 
 
 # Punto de entrada
-if __name__ == "__main__":    
-    print("🎮 Configuración de Baccarat UNO")
-    print("=" * 50)
-    
+if __name__ == "__main__":        
     # Tamaño de ventana
     print("\n¿Qué tamaño de ventana prefieres?")
     print("1. Pequeña (800x480)")
